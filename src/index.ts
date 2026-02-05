@@ -103,7 +103,7 @@ app.get('/', (c) => c.json({
   links: {
     marketplace: 'https://agents.proxies.sx/marketplace/',
     skillFile: 'https://agents.proxies.sx/marketplace/skill.md',
-    github: 'https://github.com/proxies-sx/marketplace-service-template',
+    github: 'https://github.com/bolivian-peru/marketplace-service-template',
   },
 }));
 

@@ -16,7 +16,8 @@ Proxy cost: $4/GB shared, $8/GB private ([live pricing](https://api.proxies.sx/v
 
 ```bash
 # Fork this repo, then:
-git clone https://github.com/YOUR_USERNAME/marketplace-service-template
+git clone https://github.com/bolivian-peru/marketplace-service-template
+# Or your fork: git clone https://github.com/YOUR_USERNAME/marketplace-service-template
 cd marketplace-service-template
 
 cp .env.example .env
