@@ -2,7 +2,7 @@
   "id": "proxies-sx-mobile",
   "name": "Proxies.sx Mobile Proxy",
   "description": "Real 4G/5G mobile proxies across 6 countries. HTTP + SOCKS5. Auto-rotation. x402 payments.",
-  "longDescription": "147 physical devices on real carrier networks (AT&T, T-Mobile, Vodafone, Orange, etc). Not datacenter. Not residential VPN. Actual phones on actual cell towers. Websites see you as a real mobile user. Bypass Cloudflare, Akamai, PerimeterX, DataDome. Pay per GB with USDC on Solana (~400ms) or Base (~2s). No accounts, no API keys — your agent pays and gets credentials instantly.",
+  "longDescription": "145+ physical devices on real carrier networks (AT&T, T-Mobile, Vodafone, Orange, etc). Not datacenter. Not residential VPN. Actual phones on actual cell towers. Websites see you as a real mobile user. Bypass Cloudflare, Akamai, PerimeterX, DataDome. Pay per GB with USDC on Solana (~400ms) or Base (~2s). No accounts, no API keys — your agent pays and gets credentials instantly.",
   "endpoint": "https://api.proxies.sx/v1/x402",
   "docsUrl": "https://agents.proxies.sx/skill.md",
   "pricing": {
@@ -46,7 +46,7 @@
   "category": "proxy",
   "tags": ["mobile", "4g", "5g", "rotating", "residential", "anti-detect", "scraping", "automation"],
   "inventory": {
-    "totalDevices": 147,
+    "totalDevices": 146,
     "countries": {
       "US": { "devices": 34, "carriers": ["AT&T", "T-Mobile", "Verizon"] },
       "PL": { "devices": 27, "carriers": ["Orange", "Play", "Plus"] },

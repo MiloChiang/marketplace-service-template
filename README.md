@@ -4,7 +4,7 @@
 
 Fork this repo → edit one file → deploy → start earning.
 
-You provide the idea. We provide 147 mobile devices across 6 countries, x402 payment rails, and the marketplace to find customers.
+You provide the idea. We provide 145+ mobile devices across 6 countries, x402 payment rails, and the marketplace to find customers.
 
 ## 💰 The Economics
 
