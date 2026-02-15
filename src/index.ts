@@ -1,10 +1,7 @@
 /**
  * Marketplace Service — Server Entry Point
  * ─────────────────────────────────────────
- * DON'T EDIT THIS FILE. Edit src/service.ts instead.
- *
- * This handles: CORS, rate limiting, security headers, health check,
- * service discovery, and mounts your service routes.
+ * Mounts: /api/*
  */
 
 import { Hono } from 'hono';
@@ -19,6 +16,7 @@ const app = new Hono();
 app.use('*', logger());
 
 app.use('*', cors({
+  origin: '*',
   allowHeaders: ['Content-Type', 'Payment-Signature', 'X-Payment-Signature', 'X-Payment-Network'],
   exposeHeaders: ['X-Payment-Settled', 'X-Payment-TxHash', 'Retry-After'],
 }));
@@ -63,23 +61,20 @@ setInterval(() => {
 
 // ─── ROUTES ─────────────────────────────────────────
 
-// Health check — use for uptime monitoring
 app.get('/health', (c) => c.json({
   status: 'healthy',
-  service: process.env.SERVICE_NAME || 'my-service',
+  service: process.env.SERVICE_NAME || 'job-market-intelligence',
   version: '1.0.0',
   timestamp: new Date().toISOString(),
 }));
 
-// Service discovery — AI agents read this to understand what you offer
 app.get('/', (c) => c.json({
-  name: process.env.SERVICE_NAME || 'my-service',
-  description: process.env.SERVICE_DESCRIPTION || 'A marketplace service on Proxies.sx',
+  name: process.env.SERVICE_NAME || 'job-market-intelligence',
+  description: process.env.SERVICE_DESCRIPTION || 'Job Market Intelligence API (Indeed/LinkedIn)',
   version: '1.0.0',
   endpoints: [
-      { method: 'GET', path: '/api/run', description: 'Search businesses by query + location' },
-      { method: 'GET', path: '/api/details', description: 'Get detailed business info by Place ID' },
-    ],
+    { method: 'GET', path: '/api/jobs', description: 'Get job listings (Indeed/LinkedIn) with salary + date + proxy metadata' },
+  ],
   pricing: {
     amount: process.env.PRICE_USDC || '0.005',
     currency: 'USDC',
@@ -110,13 +105,10 @@ app.get('/', (c) => c.json({
   },
 }));
 
-// Mount service routes
 app.route('/api', serviceRouter);
 
-// 404 fallback
-app.notFound((c) => c.json({ error: 'Not found', endpoints: ['/', '/health', '/api/run', '/api/details'] }, 404));
+app.notFound((c) => c.json({ error: 'Not found', endpoints: ['/', '/health', '/api/jobs'] }, 404));
 
-// Error handler
 app.onError((err, c) => {
   console.error(`[ERROR] ${err.message}`);
   return c.json({ error: 'Internal server error' }, 500);

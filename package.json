@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "bun run --hot src/index.ts",
     "start": "bun run src/index.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "proof:indeed": "bun run scripts/proof-indeed.ts"
   },
   "dependencies": {
     "hono": "^4.6.0"
@@ -14,7 +15,16 @@
     "@types/bun": "latest",
     "typescript": "^5.0.0"
   },
-  "keywords": ["x402", "proxy", "marketplace", "usdc", "hono", "bun", "mobile-proxy", "ai-agents"],
+  "keywords": [
+    "x402",
+    "proxy",
+    "marketplace",
+    "usdc",
+    "hono",
+    "bun",
+    "mobile-proxy",
+    "ai-agents"
+  ],
   "license": "MIT",
   "repository": {
     "type": "git",
