@@ -9,6 +9,7 @@ import { Hono } from 'hono';
 import { proxyFetch, getProxy } from './proxy';
 import { extractPayment, verifyPayment, build402Response } from './payment';
 import { scrapeIndeed, scrapeLinkedIn, type JobListing } from './scrapers/job-scraper';
+import { fetchReviews, fetchBusinessDetails, fetchReviewSummary, searchBusinesses } from './scrapers/reviews-scraper';
 
 export const serviceRouter = new Hono();
 
@@ -113,5 +114,179 @@ serviceRouter.get('/jobs', async (c) => {
     });
   } catch (err: any) {
     return c.json({ error: 'Scrape failed', message: err?.message || String(err) }, 502);
+  }
+});
+
+// ═══════════════════════════════════════════════════════
+// ─── GOOGLE REVIEWS & BUSINESS DATA API ─────────────
+// ═══════════════════════════════════════════════════════
+
+const REVIEWS_PRICE_USDC = 0.02;   // $0.02 per reviews fetch
+const BUSINESS_PRICE_USDC = 0.01;  // $0.01 per business lookup
+const SUMMARY_PRICE_USDC = 0.005;  // $0.005 per summary
+
+// ─── GET /api/reviews/search ────────────────────────
+
+serviceRouter.get('/reviews/search', async (c) => {
+  const walletAddress = process.env.WALLET_ADDRESS;
+  if (!walletAddress) return c.json({ error: 'Service misconfigured: WALLET_ADDRESS not set' }, 500);
+
+  const payment = extractPayment(c);
+  if (!payment) {
+    return c.json(build402Response('/api/reviews/search', 'Search businesses by query + location', BUSINESS_PRICE_USDC, walletAddress, {
+      input: { query: 'string (required)', location: 'string (required)', limit: 'number (optional, default: 10)' },
+      output: { query: 'string', location: 'string', businesses: 'BusinessInfo[]', totalFound: 'number' },
+    }), 402);
+  }
+
+  const verification = await verifyPayment(payment, walletAddress, BUSINESS_PRICE_USDC);
+  if (!verification.valid) return c.json({ error: 'Payment verification failed', reason: verification.error }, 402);
+
+  const query = c.req.query('query');
+  const location = c.req.query('location');
+  const limit = Math.min(Math.max(parseInt(c.req.query('limit') || '10') || 10, 1), 20);
+
+  if (!query) return c.json({ error: 'Missing required parameter: query', example: '/api/reviews/search?query=pizza&location=NYC' }, 400);
+  if (!location) return c.json({ error: 'Missing required parameter: location', example: '/api/reviews/search?query=pizza&location=NYC' }, 400);
+
+  try {
+    const proxy = getProxy();
+    const result = await searchBusinesses(query, location, limit);
+
+    c.header('X-Payment-Settled', 'true');
+    c.header('X-Payment-TxHash', payment.txHash);
+
+    return c.json({
+      ...result,
+      meta: { proxy: { country: proxy.country, type: 'mobile' } },
+      payment: { txHash: payment.txHash, network: payment.network, amount: verification.amount, settled: true },
+    });
+  } catch (err: any) {
+    return c.json({ error: 'Search failed', message: err?.message || String(err) }, 502);
+  }
+});
+
+// ─── GET /api/reviews/summary/:place_id ─────────────
+
+serviceRouter.get('/reviews/summary/:place_id', async (c) => {
+  const walletAddress = process.env.WALLET_ADDRESS;
+  if (!walletAddress) return c.json({ error: 'Service misconfigured: WALLET_ADDRESS not set' }, 500);
+
+  const payment = extractPayment(c);
+  if (!payment) {
+    return c.json(build402Response('/api/reviews/summary/:place_id', 'Get review summary stats: rating distribution, response rate, sentiment', SUMMARY_PRICE_USDC, walletAddress, {
+      input: { place_id: 'string (required) — Google Place ID (in URL path)' },
+      output: { business: '{ name, placeId, rating, totalReviews }', summary: '{ avgRating, totalReviews, ratingDistribution, responseRate, avgResponseTimeDays, sentimentBreakdown }' },
+    }), 402);
+  }
+
+  const verification = await verifyPayment(payment, walletAddress, SUMMARY_PRICE_USDC);
+  if (!verification.valid) return c.json({ error: 'Payment verification failed', reason: verification.error }, 402);
+
+  const placeId = c.req.param('place_id');
+  if (!placeId) return c.json({ error: 'Missing place_id in URL path' }, 400);
+
+  try {
+    const proxy = getProxy();
+    const result = await fetchReviewSummary(placeId);
+
+    c.header('X-Payment-Settled', 'true');
+    c.header('X-Payment-TxHash', payment.txHash);
+
+    return c.json({
+      ...result,
+      meta: { proxy: { country: proxy.country, type: 'mobile' } },
+      payment: { txHash: payment.txHash, network: payment.network, amount: verification.amount, settled: true },
+    });
+  } catch (err: any) {
+    return c.json({ error: 'Summary fetch failed', message: err?.message || String(err) }, 502);
+  }
+});
+
+// ─── GET /api/reviews/:place_id ─────────────────────
+
+serviceRouter.get('/reviews/:place_id', async (c) => {
+  const walletAddress = process.env.WALLET_ADDRESS;
+  if (!walletAddress) return c.json({ error: 'Service misconfigured: WALLET_ADDRESS not set' }, 500);
+
+  const payment = extractPayment(c);
+  if (!payment) {
+    return c.json(build402Response('/api/reviews/:place_id', 'Fetch Google reviews for a business by Place ID', REVIEWS_PRICE_USDC, walletAddress, {
+      input: {
+        place_id: 'string (required) — Google Place ID (in URL path)',
+        sort: '"newest" | "relevant" | "highest" | "lowest" (optional, default: "newest")',
+        limit: 'number (optional, default: 20, max: 50)',
+      },
+      output: { business: 'BusinessInfo', reviews: 'ReviewData[]', pagination: '{ total, returned, sort }' },
+    }), 402);
+  }
+
+  const verification = await verifyPayment(payment, walletAddress, REVIEWS_PRICE_USDC);
+  if (!verification.valid) return c.json({ error: 'Payment verification failed', reason: verification.error }, 402);
+
+  const placeId = c.req.param('place_id');
+  if (!placeId) return c.json({ error: 'Missing place_id in URL path' }, 400);
+
+  const sort = c.req.query('sort') || 'newest';
+  if (!['newest', 'relevant', 'highest', 'lowest'].includes(sort)) {
+    return c.json({ error: 'Invalid sort parameter. Use: newest, relevant, highest, lowest' }, 400);
+  }
+
+  const limit = Math.min(Math.max(parseInt(c.req.query('limit') || '20') || 20, 1), 50);
+
+  try {
+    const proxy = getProxy();
+    const result = await fetchReviews(placeId, sort, limit);
+
+    c.header('X-Payment-Settled', 'true');
+    c.header('X-Payment-TxHash', payment.txHash);
+
+    return c.json({
+      ...result,
+      meta: { proxy: { country: proxy.country, type: 'mobile' } },
+      payment: { txHash: payment.txHash, network: payment.network, amount: verification.amount, settled: true },
+    });
+  } catch (err: any) {
+    return c.json({ error: 'Reviews fetch failed', message: err?.message || String(err) }, 502);
+  }
+});
+
+// ─── GET /api/business/:place_id ────────────────────
+
+serviceRouter.get('/business/:place_id', async (c) => {
+  const walletAddress = process.env.WALLET_ADDRESS;
+  if (!walletAddress) return c.json({ error: 'Service misconfigured: WALLET_ADDRESS not set' }, 500);
+
+  const payment = extractPayment(c);
+  if (!payment) {
+    return c.json(build402Response('/api/business/:place_id', 'Get detailed business info + review summary by Place ID', BUSINESS_PRICE_USDC, walletAddress, {
+      input: { place_id: 'string (required) — Google Place ID (in URL path)' },
+      output: {
+        business: 'BusinessInfo — name, address, phone, website, hours, category, rating, photos, coordinates',
+        summary: 'ReviewSummary — ratingDistribution, responseRate, sentimentBreakdown',
+      },
+    }), 402);
+  }
+
+  const verification = await verifyPayment(payment, walletAddress, BUSINESS_PRICE_USDC);
+  if (!verification.valid) return c.json({ error: 'Payment verification failed', reason: verification.error }, 402);
+
+  const placeId = c.req.param('place_id');
+  if (!placeId) return c.json({ error: 'Missing place_id in URL path' }, 400);
+
+  try {
+    const proxy = getProxy();
+    const result = await fetchBusinessDetails(placeId);
+
+    c.header('X-Payment-Settled', 'true');
+    c.header('X-Payment-TxHash', payment.txHash);
+
+    return c.json({
+      ...result,
+      meta: { proxy: { country: proxy.country, type: 'mobile' } },
+      payment: { txHash: payment.txHash, network: payment.network, amount: verification.amount, settled: true },
+    });
+  } catch (err: any) {
+    return c.json({ error: 'Business details fetch failed', message: err?.message || String(err) }, 502);
   }
 });

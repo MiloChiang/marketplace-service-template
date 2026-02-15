@@ -114,3 +114,87 @@ export interface SerpResponse {
   knowledgePanel: KnowledgePanel | null;
   relatedSearches: string[];
 }
+
+// ─── GOOGLE REVIEWS & BUSINESS DATA TYPES ───────────
+
+export interface ReviewData {
+  author: string;
+  rating: number;
+  text: string;
+  date: string;
+  relativeDate: string | null;
+  likes: number;
+  ownerResponse: string | null;
+  ownerResponseDate: string | null;
+  photos: string[];
+}
+
+export interface BusinessInfo {
+  name: string;
+  placeId: string;
+  rating: number | null;
+  totalReviews: number | null;
+  address: string | null;
+  phone: string | null;
+  website: string | null;
+  hours: BusinessHours | null;
+  category: string | null;
+  categories: string[];
+  priceLevel: string | null;
+  photos: string[];
+  coordinates: { latitude: number; longitude: number } | null;
+  permanentlyClosed: boolean;
+}
+
+export interface RatingDistribution {
+  '5': number;
+  '4': number;
+  '3': number;
+  '2': number;
+  '1': number;
+}
+
+export interface ReviewSummary {
+  avgRating: number | null;
+  totalReviews: number | null;
+  ratingDistribution: RatingDistribution;
+  responseRate: number;
+  avgResponseTimeDays: number | null;
+  sentimentBreakdown: {
+    positive: number;
+    neutral: number;
+    negative: number;
+  };
+}
+
+export interface ReviewsResponse {
+  business: BusinessInfo;
+  reviews: ReviewData[];
+  pagination: {
+    total: number;
+    returned: number;
+    sort: string;
+  };
+}
+
+export interface BusinessResponse {
+  business: BusinessInfo;
+  summary: ReviewSummary;
+}
+
+export interface ReviewSummaryResponse {
+  business: {
+    name: string;
+    placeId: string;
+    rating: number | null;
+    totalReviews: number | null;
+  };
+  summary: ReviewSummary;
+}
+
+export interface ReviewSearchResponse {
+  query: string;
+  location: string;
+  businesses: BusinessInfo[];
+  totalFound: number;
+}
