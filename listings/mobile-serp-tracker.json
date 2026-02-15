@@ -50,5 +50,7 @@
   "x402": {
     "discoveryUrl": "https://api.proxies.sx/v1/x402/serp/run",
     "wellKnown": "https://api.proxies.sx/v1/x402/serp"
-  }
+  },
+  "lastVerified": "2026-02-15T00:00:00Z",
+  "healthEndpoint": "https://api.proxies.sx/v1/x402/health"
 }
