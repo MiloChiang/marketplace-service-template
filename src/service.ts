@@ -16,6 +16,8 @@ import { fetchReviews, fetchBusinessDetails, fetchReviewSummary, searchBusinesse
 import { scrapeGoogleMaps, extractDetailedBusiness } from './scrapers/maps-scraper';
 import { researchRouter } from './routes/research';
 import { trendingRouter } from './routes/trending';
+import { AmazonTracker } from './providers/amazon';
+import { LinkedInEnrichment } from './providers/linkedin';
 
 export const serviceRouter = new Hono();
 
@@ -534,5 +536,185 @@ serviceRouter.get('/business/:place_id', async (c) => {
     });
   } catch (err: any) {
     return c.json({ error: 'Business details fetch failed', message: err?.message || String(err) }, 502);
+  }
+});
+
+// ─── AMAZON TRACKER ROUTES (Issue #72) ──────────────
+
+const AMAZON_PRICE_USDC = 0.01;
+const amazonTracker = new AmazonTracker();
+
+serviceRouter.get('/amazon/product/:asin', async (c) => {
+  const walletAddress = process.env.WALLET_ADDRESS;
+  if (!walletAddress) return c.json({ error: 'Service misconfigured: WALLET_ADDRESS not set' }, 500);
+
+  const payment = extractPayment(c);
+  if (!payment) {
+    return c.json(build402Response('/api/amazon/product/:asin', 'Get Amazon product info by ASIN', AMAZON_PRICE_USDC, walletAddress, {
+      input: { asin: 'string (required) — Amazon ASIN (in URL path)' },
+      output: { asin: 'string', title: 'string', brand: 'string', price: 'number', currency: 'string', bsr: 'number', bsr_category: 'string', rating: 'number', reviews_count: 'number', image: 'string', url: 'string', last_updated: 'string' },
+    }), 402);
+  }
+
+  const verification = await verifyPayment(payment, walletAddress, AMAZON_PRICE_USDC);
+  if (!verification.valid) return c.json({ error: 'Payment verification failed', reason: verification.error }, 402);
+
+  const asin = c.req.param('asin');
+  if (!asin) return c.json({ error: 'Missing asin in URL path' }, 400);
+
+  try {
+    const product = await amazonTracker.getProductInfo(asin);
+
+    c.header('X-Payment-Settled', 'true');
+    c.header('X-Payment-TxHash', payment.txHash);
+
+    return c.json({
+      success: true,
+      data: product,
+      payment: { txHash: payment.txHash, network: payment.network, amount: verification.amount, settled: true },
+    });
+  } catch (err: any) {
+    return c.json({ error: 'Product fetch failed', message: err?.message || String(err) }, 502);
+  }
+});
+
+serviceRouter.get('/amazon/bsr/:asin', async (c) => {
+  const walletAddress = process.env.WALLET_ADDRESS;
+  if (!walletAddress) return c.json({ error: 'Service misconfigured: WALLET_ADDRESS not set' }, 500);
+
+  const payment = extractPayment(c);
+  if (!payment) {
+    return c.json(build402Response('/api/amazon/bsr/:asin', 'Get Amazon BSR (Best Sellers Rank) by ASIN', AMAZON_PRICE_USDC, walletAddress, {
+      input: { asin: 'string (required) — Amazon ASIN (in URL path)' },
+      output: { asin: 'string', bsr: 'number', category: 'string', timestamp: 'string' },
+    }), 402);
+  }
+
+  const verification = await verifyPayment(payment, walletAddress, AMAZON_PRICE_USDC);
+  if (!verification.valid) return c.json({ error: 'Payment verification failed', reason: verification.error }, 402);
+
+  const asin = c.req.param('asin');
+  if (!asin) return c.json({ error: 'Missing asin in URL path' }, 400);
+
+  try {
+    const bsr = await amazonTracker.getBSR(asin);
+
+    c.header('X-Payment-Settled', 'true');
+    c.header('X-Payment-TxHash', payment.txHash);
+
+    return c.json({
+      success: true,
+      data: bsr,
+      payment: { txHash: payment.txHash, network: payment.network, amount: verification.amount, settled: true },
+    });
+  } catch (err: any) {
+    return c.json({ error: 'BSR fetch failed', message: err?.message || String(err) }, 502);
+  }
+});
+
+serviceRouter.get('/amazon/search', async (c) => {
+  const walletAddress = process.env.WALLET_ADDRESS;
+  if (!walletAddress) return c.json({ error: 'Service misconfigured: WALLET_ADDRESS not set' }, 500);
+
+  const payment = extractPayment(c);
+  if (!payment) {
+    return c.json(build402Response('/api/amazon/search', 'Search Amazon products by keyword', AMAZON_PRICE_USDC, walletAddress, {
+      input: { query: 'string (required) — Search query' },
+      output: { products: 'AmazonProduct[]', total: 'number' },
+    }), 402);
+  }
+
+  const verification = await verifyPayment(payment, walletAddress, AMAZON_PRICE_USDC);
+  if (!verification.valid) return c.json({ error: 'Payment verification failed', reason: verification.error }, 402);
+
+  const query = c.req.query('query');
+  if (!query) return c.json({ error: 'Missing query parameter' }, 400);
+
+  try {
+    const products = await amazonTracker.searchProducts(query);
+
+    c.header('X-Payment-Settled', 'true');
+    c.header('X-Payment-TxHash', payment.txHash);
+
+    return c.json({
+      success: true,
+      data: { products, total: products.length },
+      payment: { txHash: payment.txHash, network: payment.network, amount: verification.amount, settled: true },
+    });
+  } catch (err: any) {
+    return c.json({ error: 'Search failed', message: err?.message || String(err) }, 502);
+  }
+});
+
+// ─── LINKEDIN ENRICHMENT ROUTES (Issue #77) ─────────
+
+const LINKEDIN_PRICE_USDC = 0.015;
+const linkedInEnrichment = new LinkedInEnrichment();
+
+serviceRouter.get('/linkedin/person', async (c) => {
+  const walletAddress = process.env.WALLET_ADDRESS;
+  if (!walletAddress) return c.json({ error: 'Service misconfigured: WALLET_ADDRESS not set' }, 500);
+
+  const payment = extractPayment(c);
+  if (!payment) {
+    return c.json(build402Response('/api/linkedin/person', 'Enrich LinkedIn person profile by URL', LINKEDIN_PRICE_USDC, walletAddress, {
+      input: { url: 'string (required) — LinkedIn profile URL' },
+      output: { linkedin_url: 'string', profile_id: 'string', name: 'string', headline: 'string', company: 'string', location: 'string', connections: 'number', skills: 'string[]', enriched_at: 'string' },
+    }), 402);
+  }
+
+  const verification = await verifyPayment(payment, walletAddress, LINKEDIN_PRICE_USDC);
+  if (!verification.valid) return c.json({ error: 'Payment verification failed', reason: verification.error }, 402);
+
+  const url = c.req.query('url');
+  if (!url) return c.json({ error: 'Missing url parameter' }, 400);
+
+  try {
+    const profile = await linkedInEnrichment.enrichPerson(url);
+
+    c.header('X-Payment-Settled', 'true');
+    c.header('X-Payment-TxHash', payment.txHash);
+
+    return c.json({
+      success: true,
+      data: profile,
+      payment: { txHash: payment.txHash, network: payment.network, amount: verification.amount, settled: true },
+    });
+  } catch (err: any) {
+    return c.json({ error: 'Profile enrichment failed', message: err?.message || String(err) }, 502);
+  }
+});
+
+serviceRouter.get('/linkedin/company', async (c) => {
+  const walletAddress = process.env.WALLET_ADDRESS;
+  if (!walletAddress) return c.json({ error: 'Service misconfigured: WALLET_ADDRESS not set' }, 500);
+
+  const payment = extractPayment(c);
+  if (!payment) {
+    return c.json(build402Response('/api/linkedin/company', 'Enrich LinkedIn company by URL', LINKEDIN_PRICE_USDC, walletAddress, {
+      input: { url: 'string (required) — LinkedIn company URL' },
+      output: { linkedin_url: 'string', company_id: 'string', name: 'string', industry: 'string', size: 'string', headquarters: 'string', website: 'string', followers: 'number', enriched_at: 'string' },
+    }), 402);
+  }
+
+  const verification = await verifyPayment(payment, walletAddress, LINKEDIN_PRICE_USDC);
+  if (!verification.valid) return c.json({ error: 'Payment verification failed', reason: verification.error }, 402);
+
+  const url = c.req.query('url');
+  if (!url) return c.json({ error: 'Missing url parameter' }, 400);
+
+  try {
+    const company = await linkedInEnrichment.enrichCompany(url);
+
+    c.header('X-Payment-Settled', 'true');
+    c.header('X-Payment-TxHash', payment.txHash);
+
+    return c.json({
+      success: true,
+      data: company,
+      payment: { txHash: payment.txHash, network: payment.network, amount: verification.amount, settled: true },
+    });
+  } catch (err: any) {
+    return c.json({ error: 'Company enrichment failed', message: err?.message || String(err) }, 502);
   }
 });
